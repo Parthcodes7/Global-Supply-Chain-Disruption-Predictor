@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Disruption Predictor | DBMS Academic Portal</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=3.2">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Academic Header -->
+        <header class="app-header">
+            <div>
+                <h1 class="project-title">🚢 Global Supply Chain Disruption Predictor</h1>
+                <p class="project-subtitle">Academic DBMS Prototype &bull; VIT Pune &bull; MySQL 8.0 Spatial Engine &bull; Port 3307</p>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-success">🟢 MySQL 8.0 Live</span>
+                <span class="badge badge-info">Database: supply_chain_db</span>
+            </div>
+        </header>
+
+        <!-- KPI Summary Cards (Real-time SQL Aggregates) -->
+        <section class="kpi-grid">
+            <div class="card kpi-card">
+                <div class="kpi-title">Total Shipments</div>
+                <div class="kpi-num text-cyan" id="statTotalShipments">--</div>
+                <div class="kpi-desc"><code>SELECT COUNT(*) FROM SHIPMENTS</code></div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-title">In Transit</div>
+                <div class="kpi-num text-green" id="statTransit">--</div>
+                <div class="kpi-desc"><code>WHERE status = 'In Transit'</code></div>
+            </div>
+            <div class="card kpi-card alert-card">
+                <div class="kpi-title">Disrupted Vessels</div>
+                <div class="kpi-num text-red" id="statDisrupted">--</div>
+                <div class="kpi-desc"><code>WHERE status = 'Disrupted'</code></div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-title">Total Cargo Value</div>
+                <div class="kpi-num" id="statValue">--</div>
+                <div class="kpi-desc"><code>SUM(estimated_value_usd)</code></div>
+            </div>
+        </section>
+
+        <!-- Tab Bar Navigation -->
+        <nav class="tab-bar">
+            <button class="tab-button active" id="btnTabCrud" onclick="showTab('tabCrud')">
+                📦 1. Shipments CRUD (DML & Filters)
+            </button>
+            <button class="tab-button" id="btnTabFiles" onclick="showTab('tabFiles')">
+                📁 2. Data Files & Database Tables
+            </button>
+            <button class="tab-button" id="btnTabTrigger" onclick="showTab('tabTrigger')">
+                ⚡ 3. Disaster Trigger Demo
+            </button>
+            <button class="tab-button" id="btnTabProc" onclick="showTab('tabProc')">
+                ⚓ 4. Stored Procedure (Reroute)
+            </button>
+            <button class="tab-button" id="btnTabQueries" onclick="showTab('tabQueries')">
+                💻 5. Academic SQL Queries
+            </button>
+        </nav>
+
+        <!-- ============================================================= -->
+        <!-- TAB 1: SHIPMENTS MANAGEMENT (DML CRUD & WHERE OPERATORS)       -->
+        <!-- ============================================================= -->
+        <section class="tab-content active" id="tabCrud">
+            <!-- Filter & Search Bar (LIKE, IN, BETWEEN operators) -->
+            <div class="card" style="margin-bottom: 14px;">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>🔍 Filter & Search Shipments (WHERE Clause Operators)</h2>
+                        <p>Demonstrates <code>LIKE</code> (Pattern Matching), <code>IN / =</code> (Set Membership), and <code>BETWEEN...AND</code> (Range Search)</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddModal()">
+                        ➕ Insert New Shipment (DML INSERT)
+                    </button>
+                </div>
+
+                <div class="filter-grid">
+                    <div class="form-field">
+                        <label>Vessel Name (<code>LIKE '%vessel%'</code>)</label>
+                        <input type="text" id="fltVessel" placeholder="Search vessel name e.g. Ever, MSC, Maersk..." oninput="debounceSearch()">
+                    </div>
+                    <div class="form-field">
+                        <label>Status (<code>IN ('In Transit', ...)</code>)</label>
+                        <select id="fltStatus" onchange="loadShipmentsTable()">
+                            <option value="all">All Statuses</option>
+                            <option value="In Transit">In Transit</option>
+                            <option value="Disrupted">Disrupted</option>
+                            <option value="Delivered">Delivered</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Weight (<code>BETWEEN min AND max</code>)</label>
+                        <div class="range-inputs">
+                            <input type="number" id="fltMinWeight" placeholder="Min MT" oninput="debounceSearch()">
+                            <input type="number" id="fltMaxWeight" placeholder="Max MT" oninput="debounceSearch()">
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" onclick="resetFilters()">Clear Filters</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shipments Table (Direct DML CRUD) -->
+            <div class="card">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>Shipments Operational Table (<code>SHIPMENTS</code>)</h2>
+                        <p>Interactive table &bull; Every Insert, Edit, and Delete updates MySQL in real time</p>
+                    </div>
+                    <div>
+                        <span class="badge badge-info" id="shipmentCountBadge">Loading...</span>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="simple-table" id="tableShipments">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Tracking #</th>
+                                <th>Vessel Name</th>
+                                <th>Origin &rarr; Destination Port</th>
+                                <th>Commodity</th>
+                                <th>Weight</th>
+                                <th>Value (USD)</th>
+                                <th>Status</th>
+                                <th>Disruption Notes</th>
+                                <th>Actions (DML)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyShipments">
+                            <tr>
+                                <td colspan="10" class="text-center">Loading shipments...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- TAB 2: DATA FILES & DATABASE TABLES / VIEWS                    -->
+        <!-- ============================================================= -->
+        <section class="tab-content" id="tabFiles">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📁 Project Data Files & MySQL 8.0 Ingestion Status</h2>
+                    <p>All 4 CSV dataset files are loaded and stored in the <code>supply_chain_db</code> MySQL database</p>
+                </div>
+
+                <div class="table-wrapper" style="margin-top: 10px;">
+                    <table class="simple-table">
+                        <thead>
+                            <tr>
+                                <th>MySQL Table</th>
+                                <th>Source CSV Dataset</th>
+                                <th>Loaded Rows</th>
+                                <th>Engine & Datatype Features</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyFilesTable">
+                            <tr>
+                                <td colspan="5" class="text-center">Loading database table summary...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Database Views Summary -->
+            <div class="card" style="margin-top: 16px;">
+                <div class="card-header">
+                    <h2>📊 Academic Relational Views (<code>02_views.sql</code>)</h2>
+                    <p>Standard SQL Views creating pre-computed security and disruption perspectives</p>
+                </div>
+
+                <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+                    <div style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <strong style="color: var(--color-primary);">1. v_disrupted_shipments</strong>
+                        <p style="font-size: 0.8rem; color: var(--text-gray); margin-top: 6px;">
+                            Filters shipments in <code>('Disrupted', 'Delayed', 'Diverted')</code> status, joining origin and destination ports with commodity pricing.
+                        </p>
+                        <code style="font-size: 0.75rem; color: #38bdf8;">SELECT * FROM v_disrupted_shipments;</code>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <strong style="color: var(--color-amber);">2. v_high_risk_ports</strong>
+                        <p style="font-size: 0.8rem; color: var(--text-gray); margin-top: 6px;">
+                            Left joins <code>PORTS</code> with <code>CONFLICTS</code> where port status is <code>'Hazard Alert'</code> or country instability score &ge; 70.0.
+                        </p>
+                        <code style="font-size: 0.75rem; color: #38bdf8;">SELECT * FROM v_high_risk_ports;</code>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.03); padding: 14px; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <strong style="color: var(--color-green);">3. v_commodity_exposure</strong>
+                        <p style="font-size: 0.8rem; color: var(--text-gray); margin-top: 6px;">
+                            Aggregates disrupted financial value grouped by commodity using <code>SUM()</code>, <code>AVG()</code>, and <code>COUNT()</code>.
+                        </p>
+                        <code style="font-size: 0.75rem; color: #38bdf8;">SELECT * FROM v_commodity_exposure;</code>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- TAB 3: TRIGGER DEMO (AFTER INSERT ON DISASTERS)                -->
+        <!-- ============================================================= -->
+        <section class="tab-content" id="tabTrigger">
+            <div class="card">
+                <div class="card-header">
+                    <h2>⚡ Test MySQL Trigger: <code>trg_after_disaster_insert</code></h2>
+                    <p>
+                        When a disaster record is inserted into <code>DISASTERS</code>, MySQL's trigger automatically computes spherical distances (<code>ST_Distance_Sphere</code>),
+                        updates nearby ports to <strong>Hazard Alert</strong>, marks active shipments as <strong>Disrupted</strong>, and writes audit records to <code>DISRUPTION_LOG</code>.
+                    </p>
+                </div>
+
+                <!-- 1-Click Presets -->
+                <div class="preset-box">
+                    <strong>Quick Test Presets (1-Click):</strong>
+                    <div class="preset-buttons">
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="setPreset('Tropical Storm', 40.55, -74.25, 350, 'Simulated tropical storm near US East Coast shipping lanes')">
+                            📍 Tropical Storm near US East Coast
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="setPreset('Super Typhoon', 14.59, 120.98, 450, 'Simulated super typhoon near South China Sea')">
+                            📍 Typhoon near South China Sea
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                            onclick="setPreset('Severe Cyclone', 18.92, 72.83, 300, 'Simulated cyclone near Mumbai / Arabian Sea corridor')">
+                            📍 Cyclone near Mumbai Corridor
+                        </button>
+                    </div>
+                </div>
+
+                <form id="formTrigger" onsubmit="handleTriggerSubmit(event)" class="simple-form">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>Disaster Event Type</label>
+                            <input type="text" id="trigEvent" value="Tropical Storm" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Latitude (-90 to 90)</label>
+                            <input type="number" step="0.01" id="trigLat" value="40.55" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Longitude (-180 to 180)</label>
+                            <input type="number" step="0.01" id="trigLon" value="-74.25" required>
+                        </div>
+                        <div class="form-field">
+                            <label>Danger Radius (km)</label>
+                            <input type="number" id="trigRadius" value="350" required>
+                        </div>
+                    </div>
+                    <div class="form-field" style="margin-top: 10px;">
+                        <label>Description / Incident Notes</label>
+                        <input type="text" id="trigDesc" value="Simulated maritime storm near major shipping lanes" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="btnFireTrigger" style="margin-top: 14px;">
+                        🚀 Insert Disaster & Fire Trigger (DML INSERT)
+                    </button>
+                </form>
+
+                <div id="triggerResultBox" class="result-box" style="display: none; margin-top: 20px;">
+                    <h3>✅ MySQL Trigger Fired Successfully!</h3>
+                    <p id="triggerMsg"></p>
+                    <div id="triggerAffectedList"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- TAB 4: STORED PROCEDURE DEMO (sp_find_alternative_port)        -->
+        <!-- ============================================================= -->
+        <section class="tab-content" id="tabProc">
+            <div class="card">
+                <div class="card-header">
+                    <h2>⚓ Test MySQL Stored Procedure: <code>sp_find_alternative_port</code></h2>
+                    <p>
+                        Executes <code>CALL sp_find_alternative_port(p_port_code, p_search_radius_km)</code> in MySQL.
+                        Queries safe operational ports outside all active hazard perimeters, ranked by shortest spatial distance.
+                    </p>
+                </div>
+
+                <div class="simple-form">
+                    <div class="form-grid" style="grid-template-columns: 2fr 1fr;">
+                        <div class="form-field">
+                            <label>Choose Target Disrupted Port</label>
+                            <select id="selProcPort" class="simple-select">
+                                <option value="">Loading ports...</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label>Search Radius (km)</label>
+                            <select id="selProcRadius" class="simple-select">
+                                <option value="500">500 km</option>
+                                <option value="1000" selected>1,000 km</option>
+                                <option value="1500">1,500 km</option>
+                                <option value="2500">2,500 km</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="handleProcedureRun()" style="margin-top: 14px;">
+                        🔍 Find Safe Alternative Ports (CALL Procedure)
+                    </button>
+                </div>
+
+                <div id="procResultBox" class="result-box" style="display: none; margin-top: 20px;">
+                    <h3>Recommended Safe Alternative Ports (Returned by Stored Procedure)</h3>
+                    <div class="table-wrapper">
+                        <table class="simple-table">
+                            <thead>
+                                <tr>
+                                    <th>Safe Alternative Port</th>
+                                    <th>Country</th>
+                                    <th>Harbor Size</th>
+                                    <th>Distance from Original</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyProcedure"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================= -->
+        <!-- TAB 5: ACADEMIC SQL QUERIES RUNNER                            -->
+        <!-- ============================================================= -->
+        <section class="tab-content" id="tabQueries">
+            <div class="card">
+                <div class="card-header">
+                    <h2>💻 Test Predefined Academic SQL Queries (Syllabus Concepts)</h2>
+                    <p>Demonstrates Joins, Pattern Matching (<code>LIKE/NOT LIKE</code>), Aggregations (<code>COUNT/SUM/AVG/MIN/MAX</code>), <code>GROUP BY + HAVING</code>, Subqueries, and <code>UNION</code></p>
+                </div>
+
+                <div class="query-selector">
+                    <button class="btn btn-outline active" id="qBtn1" onclick="runSyllabusQuery(1)">
+                        Query 1: Joins & Spatial Proximity
+                    </button>
+                    <button class="btn btn-outline" id="qBtn2" onclick="runSyllabusQuery(2)">
+                        Query 2: GROUP BY & HAVING
+                    </button>
+                    <button class="btn btn-outline" id="qBtn3" onclick="runSyllabusQuery(3)">
+                        Query 3: Nested & Correlated Subqueries
+                    </button>
+                    <button class="btn btn-outline" id="qBtn4" onclick="runSyllabusQuery(4)">
+                        Query 4: UNION Set Operator
+                    </button>
+                </div>
+
+                <div class="sql-box" style="margin-top: 14px;">
+                    <div class="sql-box-header">
+                        <strong id="qTitle">Query 1</strong>
+                        <span id="qTimer" class="text-green">Executed in -- ms</span>
+                    </div>
+                    <pre><code id="qCode">-- Click a query above to execute against MySQL 8.0</code></pre>
+                </div>
+
+                <div class="table-wrapper" style="margin-top: 16px;">
+                    <table class="simple-table" id="tableQueryResult">
+                        <thead id="theadQuery"></thead>
+                        <tbody id="tbodyQuery"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Academic Footer -->
+        <footer class="app-footer">
+            VIT Pune &bull; Database Management Systems Project &bull; MySQL 8.0 Backend &bull; All changes directly persisted to database
+        </footer>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- MODAL 1: INSERT NEW SHIPMENT (DML INSERT)                      -->
+    <!-- ============================================================= -->
+    <div id="modalAddShipment" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header flex-between">
+                <h3>➕ Insert New Shipment (DML INSERT)</h3>
+                <button type="button" class="modal-close-btn" onclick="closeAddModal()">&times;</button>
+            </div>
+            <form id="formAddShipment" onsubmit="handleAddShipmentSubmit(event)" class="simple-form">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Tracking Number</label>
+                        <input type="text" id="addTracking" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Vessel Name</label>
+                        <input type="text" id="addVessel" placeholder="e.g. Ever Ace" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Origin Port</label>
+                        <select id="addOriginPort" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label>Destination Port</label>
+                        <select id="addDestPort" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label>Cargo Commodity</label>
+                        <select id="addCommodity" required></select>
+                    </div>
+                    <div class="form-field">
+                        <label>Cargo Weight (MT)</label>
+                        <input type="number" id="addWeight" value="25000" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Cargo Value (USD)</label>
+                        <input type="number" id="addValue" value="1500000" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Status</label>
+                        <select id="addStatus">
+                            <option value="In Transit" selected>In Transit</option>
+                            <option value="Disrupted">Disrupted</option>
+                            <option value="Delivered">Delivered</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-field" style="margin-top: 10px;">
+                    <label>Disruption / Voyage Notes</label>
+                    <input type="text" id="addNotes" value="Scheduled commercial transit" required>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitAdd">Save to Database (INSERT)</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================================= -->
+    <!-- MODAL 2: EDIT SHIPMENT (DML UPDATE)                            -->
+    <!-- ============================================================= -->
+    <div id="modalEditShipment" class="modal-backdrop" style="display: none;">
+        <div class="modal-box">
+            <div class="modal-header flex-between">
+                <h3>✏️ Edit Shipment (DML UPDATE)</h3>
+                <button type="button" class="modal-close-btn" onclick="closeEditModal()">&times;</button>
+            </div>
+            <form id="formEditShipment" onsubmit="handleEditShipmentSubmit(event)" class="simple-form">
+                <input type="hidden" id="editShipmentId">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label>Tracking Number (Primary Key)</label>
+                        <input type="text" id="editTracking" disabled style="opacity: 0.6;">
+                    </div>
+                    <div class="form-field">
+                        <label>Vessel Name</label>
+                        <input type="text" id="editVessel" required>
+                    </div>
+                    <div class="form-field">
+                        <label>Status</label>
+                        <select id="editStatus">
+                            <option value="In Transit">In Transit</option>
+                            <option value="Disrupted">Disrupted</option>
+                            <option value="Delivered">Delivered</option>
+                        </select>
+                    </div>
+                    <div class="form-field">
+                        <label>Estimated Value (USD)</label>
+                        <input type="number" id="editValue" required>
+                    </div>
+                </div>
+                <div class="form-field" style="margin-top: 10px;">
+                    <label>Disruption Notes / Reason</label>
+                    <input type="text" id="editNotes" required>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitEdit">Update Database (UPDATE)</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="app.js?v=3.2"></script>
+</body>
+
+</html>

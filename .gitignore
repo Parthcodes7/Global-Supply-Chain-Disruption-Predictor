@@ -1,0 +1,22 @@
+# MySQL Server Data Directory (Binary DB files)
+mysql_data/
+*.pid
+*.err
+*.ibd
+ibdata*
+ib_logfile*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.venv/
+env/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
